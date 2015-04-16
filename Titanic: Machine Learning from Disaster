@@ -1,54 +1,146 @@
+## setting the working directory
+setwd("~/Desktop")
 
-train <- read.csv("./train.csv", stringsAsFactors = FALSE)
+## import the data set
+train <- read.csv("./train.csv")
+sub.test <- train[sample(nrow(train), nrow(train)*0.5),]
+test <- read.csv("./test.csv")
 
-test <- read.csv("./test.csv", stringsAsFactors = FALSE)
+## first prediction
+prop.table(table(train$Survived))
+        ## assign prediction to sub test data
+sub.test$Predicted <- 0
+        ## prediction accuracy of .60 based on sub test data
+prop.table(table(sub.test$Survived, sub.test$Predicted), 2)
+        ## make prediction to test data
+test$Survive <- 0
+submit <- data.frame(PassengerID = test$PassengerId, 
+                     Survived = test$Survive)
+        ## exports the test variables out
+write.csv(submit, file = "allperish.csv", row.names = FALSE)
 
-library(rattle)
+## second prediction
+prop.table(table(train$Sex))
+        ## shows that more females survive than males
+prop.table(table(train$Sex, train$Survived),1) 
+        ## assign predication of all females survive
+sub.test$Predicted <- 0
+sub.test$Predicted[sub.test$Sex == "female"] <- 1
+        ## prediction accuracy of .78 based on sub test data
+prop.table(table(sub.test$Survived, sub.test$Predicted))
+        ## make predictions to test data
+test$Survive <- 0
+test$Survive[test$Sex == "female"] <-1
+submit <- data.frame(PassengerID = test$PassengerId, 
+                     Survived = test$Survive)
+        ## exports the test variables out
+write.csv(submit, file = "allfemalessurvive.csv", row.names = FALSE)
+
+## third prediction
+summary(train$Age)
+train$Child <- ifelse(train$Age < 18, 1, 0)
+        ## displays the percentage of those who survived
+aggregate(train$Survived ~ train$Sex + train$Child, 
+          FUN = function(x) {sum(x)/length(x)})
+        ## make prediction to sub test data
+sub.test$Predicted <- ifelse((sub.test$Sex == "female" |
+                                     sub.test$Age < 18), 1, 0)
+sub.test$Predicted[is.na(sub.test$Predicted) == TRUE] <- 0
+        ## prediction accuracy of .78 based on sub test data
+        ## not much difference than second prediction 
+        ## but worth looking
+prop.table(table(sub.test$Predicted, sub.test$Survived))
+        ## make predictions to test data
+test$Survive <- ifelse((test$Sex == "female" |
+                                test$Age < 18), 1, 0)
+test$Survive[is.na(test$Survive) == TRUE] <- 0
+submit <- data.frame(PassengerID = test$PassengerId, 
+                     Survived = test$Survive)
+## exports the test variables out
+write.csv(submit, file = "allfemales_childssurvive.csv", row.names = FALSE)
+
+## fourth prediction
+prop.table(table(train$Pclass, train$Survived), 1)
+        ## setting up payment categories
+train$Fare2 <- ">30"
+train$Fare2[train$Fare < 30 & train$Fare >= 20] <- "20-30"
+train$Fare2[train$Fare < 20 & train$Fare >= 10] <- "10-20"
+train$Fare2[train$Fare < 10] <- "<10"
+prop.table(table(train$Fare2, train$Survived), 1)
+        ## examining the interaction gender, payment class
+        ## and fare payment categories
+                ## Note: Females, >30, 3 have low survival rates
+                ## Females, 20-30, 3 have low survival rates
+aggregate(train$Survived ~ train$Fare2 + train$Pclass + train$Sex, 
+          FUN = function(x) {sum(x)/length(x)})
+        ## make prediction to sub test data
+sub.test$Predicted <- 0
+sub.test$Predicted[sub.test$Sex == "female"] <- 1
+sub.test$Predicted <- ifelse((sub.test$Sex == "female" &
+                                      sub.test$Pclass == 3 &
+                                      sub.test$Fare >= 20), 0, 
+                             sub.test$Predicted)
+        ## prediction accuracy of .82 based on sub test data
+prop.table(table(sub.test$Predicted, sub.test$Survived))
+        ## make prediction to test data
+test$Survive <- 0
+test$Survive[test$Sex == "female"] <- 1
+test$Survive <- ifelse((test$Sex == "female" &
+                                test$Pclass == 3 &
+                                test$Fare >= 20), 0, 
+                       test$Survive)
+submit <- data.frame(PassengerID = test$PassengerId, 
+                     Survived = test$Survive)
+        ## exports the test variables out
+write.csv(submit, file = "allfemales_childssurvive.csv", row.names = FALSE)
+
+## Fifth Prediction
+        ## packages that need to be installed
+## install.packages("rpart")
+## install.packages('rattle')
+## install.packages('rpart.plot')
+## install.packages('RColorBrewer')        
 library(rpart)
+library(rattle)
 library(rpart.plot)
 library(RColorBrewer)
+        ## first decision tree
+fit <- rpart(Survived ~ Pclass +Sex + Age +
+                     SibSp + Parch +Embarked, 
+             data = train, method = "class")
+plot(fit); text(fit)
+fancyRpartPlot(fit)
+        ## make prediction to sub test data
+sub.test$Predicted <- predict(fit, sub.test, type = "class")
+        ## prediction accuracy of .82 based on sub test data
+prop.table(table(sub.test$Predicted, sub.test$Survived))
+        ## make prediction to test data
+prediction <- predict(fit, test, type = "class")
+submit <- data.frame(PassengerId = test$PassengerId, Survived = prediction)
+write.csv(submit, file = "myfirstdtree.csv", row.names = FALSE)
 
+## Sixth Prediction
+        ## Use of feature engineering to 
+        ## distinguish between passengers
+train <- read.csv("./train.csv")
+sub.test <- train[sample(nrow(train), nrow(train)*0.5),]
+test <- read.csv("./test.csv")
+head(train$Name)
+        ## combine the data sets together
 test$Survived <- NA
-
 combi <- rbind(train, test)
-
+        ## fixing the titles of individuals
 combi$Name <- as.character(combi$Name)
-
 combi$Title <- sapply(combi$Name, 
-                      FUN = function(x) {strsplit(x, split = '[,.]')[[1]][2]})
-combi$Title <- sub(' ', "", combi$Title)
-
-combi$Title[combi$Title %in% c("Mme", "Mlle")] <- "Mlle"
-combi$Title[combi$Title %in% c("Capt", "Don", "Major", "Sir")] <- "Sir"
-combi$Title[combi$Title %in% c("Dona", "Lady", "the Countess", "Jonkheer")] <- "Lady"
-
+                      FUN = function(x) {strsplit(x, split = "[,.]")[[1]][2]})
+combi$Title <- sub(" ", "", combi$Title)
+combi$Title[combi$Title %in% c('Mme', 'Mlle')] <- 'Mlle'
+combi$Title[combi$Title %in% c('Capt', 'Don', 'Major', 'Sir')] <- 'Sir'
+combi$Title[combi$Title %in% c('Dona', 'Lady', 'the Countess', 'Jonkheer')] <- 'Lady'
 combi$Title <- factor(combi$Title)
-
+        ## creating a family size
 combi$FamilySize <- combi$SibSp + combi$Parch + 1
 
-combi$Surname <- sapply(combi$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][1]})
-
-combi$FamilyID <- paste(as.character(combi$FamilySize), combi$Surname, sep="")
-combi$FamilyID[combi$FamilySize <= 2] <- "Small"
-
-famIDs <- data.frame(table(combi$FamilyID))
-famIDs <- famIDs[famIDs$Freq <= 2,]
-
-combi$FamilyID[combi$FamilyID %in% famIDs$Var1] <- "Small"
-combi$FamilyID <- as.factor(combi$FamilyID)
-
-train <- combi[1:891,]
-test <- combi[892:1309,]
-
-fit <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + FamilySize + FamilyID,
-             data=train, method="class")
-fancyRpartPlot(fit)
 
 
-Prediction <- predict(fit, test, type = "class")
 
-submit <- data.frame(PassengerID = test$PassengerId, 
-                     Survived = Prediction)
-
-        ## exports the test variables out
-write.csv(submit, file = "decisiontreemodel3.csv", row.names = FALSE)
